@@ -3,7 +3,11 @@ package services
 import (
 	"fmt"
 	"github.com/gofiber/fiber/v2"
+	"log"
+	"myapp/database"
 	"myapp/dto"
+	"myapp/models"
+	"strings"
 )
 
 func Register(c *fiber.Ctx) error {
@@ -27,6 +31,27 @@ func Register(c *fiber.Ctx) error {
 		return c.JSON(fiber.Map{
 			"message": "Password must be greater than 6 characters",
 		})
+	}
+
+	email := strings.TrimSpace(data.Email)
+	var existingUser models.User
+	if err := database.DB.Where("email = ?", email).First(&existingUser).Error; err == nil {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "User with this email already exists",
+		})
+	}
+
+	user := models.User{
+		Email: email,
+	}
+	if err := user.SetPassword(data.Password); err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error": "Failed to set password",
+		})
+	}
+	err := database.DB.Create(&user)
+	if err != nil {
+		log.Println(err)
 	}
 
 	c.Status(200)
