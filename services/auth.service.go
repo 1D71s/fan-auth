@@ -7,7 +7,9 @@ import (
 	"myapp/database"
 	"myapp/dto"
 	"myapp/models"
+	"myapp/utils"
 	"strings"
+	"time"
 )
 
 func Register(c *fiber.Ctx) error {
@@ -57,5 +59,52 @@ func Register(c *fiber.Ctx) error {
 	c.Status(200)
 	return c.JSON(fiber.Map{
 		"message": "Account created successfully!",
+	})
+}
+
+func Login(c *fiber.Ctx) error {
+	var data dto.LoginDto
+
+	if err := c.BodyParser(&data); err != nil {
+		fmt.Println("Unable to parse body:", err)
+		return c.Status(400).JSON(fiber.Map{
+			"error": "Invalid request format",
+		})
+	}
+
+	email := strings.TrimSpace(data.Email)
+	var existingUser models.User
+	if err := database.DB.Where("email = ?", email).First(&existingUser).Error; err != nil {
+		fmt.Println("User not found or database error:", err)
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid Email or Password",
+		})
+	}
+
+	if err := existingUser.ComparePassword(strings.TrimSpace(data.Password)); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid Email or Password",
+		})
+	}
+
+	token, err := utils.GenerateJWT(existingUser)
+	if err != nil {
+		log.Println(err)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Could not generate token",
+		})
+	}
+
+	c.Cookie(&fiber.Cookie{
+		Name:     "token",
+		Value:    token,
+		Expires:  time.Now().Add(24 * time.Hour),
+		HTTPOnly: true,
+		Secure:   true,
+		SameSite: "Strict",
+	})
+
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"message": "Login successful",
 	})
 }
